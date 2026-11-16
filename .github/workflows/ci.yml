@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 运行模块回测
+        run: |
+          node tester/mock-app.js templates/examples/demo-site/demo-site.js
+
+      - name: 运行构建脚本
+        run: |
+          cp templates/examples/demo-site/demo-site.js ./demo-site.js
+          node templates/build/build.js
+          ls -la dist/

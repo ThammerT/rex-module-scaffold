@@ -1,0 +1,1 @@
+{"name":"rex-yuanqi-wallpaper","version":"2.4.0","private":true,"scripts":{"test":"node test.cjs","test:live":"node test.cjs --live"},"devDependencies":{"cheerio":"1.0.0"}}

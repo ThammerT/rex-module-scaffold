@@ -1,99 +1,111 @@
 /**
- * {{TITLE}}
- * Rex 资源类模块 — 模块代码模板
- * 模块 id：{{MODULE_ID}}
+ * {{TITLE}} — Rex 资源模块（{{MODULE_ID}}）
+ * 宿主全局脚本：只依赖 Widget.http / Widget.html，不要用 Node 的 require/fetch。
+ * 列表项 type 固定用 "url"，id/link 都是详情页地址。
  */
 
-WidgetMetadata = {
+var WidgetMetadata = {
   id: "{{MODULE_ID}}",
   title: "{{TITLE}}",
   version: "{{VERSION}}",
   requiredVersion: "0.0.1",
-  description: "{{TITLE}} — Rex 播放器资源模块",
   author: "{{AUTHOR}}",
-  site: "https://rexnow.tv",
-  detailCacheDuration: 60,
+  site: "https://example.com",
+  description: "{{TITLE}} — Rex 播放器资源模块",
   modules: [
     {
-      id: "{{MODULE_SLUG}}",
-      title: "{{TITLE}}",
-      functionName: "{{FUNCTION_NAME}}",
+      id: "list",
+      title: "资源列表",
+      functionName: "getList",
       type: "stream",
-      cacheDuration: 3600,
+      requiresWebView: false,
+      cacheDuration: 300,
       params: [
-        { name: "page", title: "页码", type: "page", value: 1 }
+        { name: "category", title: "分类", type: "enumeration", value: "hot", enumOptions: [
+          { title: "热门", value: "hot" }, { title: "最新", value: "new" }
+        ] },
+        { name: "pg", title: "页码", type: "page", value: "1" }
       ]
     }
-  ],
-  search: {
-    title: "搜索",
-    functionName: "search",
-    params: [
-      { name: "keyword", title: "关键词", type: "input" },
-      { name: "page", title: "页码", type: "page", value: 1 }
-    ]
-  }
+  ]
 };
 
-/**
- * 资源列表 — 返回 VideoItem[]
- * params.page 由 App 注入（声明了 type: "page" 参数）
- */
-async function {{FUNCTION_NAME}}(params) {
-  const page = params.page || 1;
+var BASE = "https://example.com";
 
-  // TODO: 替换为你的真实数据源抓取逻辑
-  const items = [
-    {
-      id: "tmdb-550",
-      type: "tmdb",
-      mediaType: "movie",
-      title: "示例影片",
-      posterPath: "/example/poster.jpg",
-      backdropPath: "/example/backdrop.jpg",
-      coverUrl: "https://example.com/cover.jpg",
-      releaseDate: "2025-01-01",
-      rating: 8.4,
-      description: "这是一个自动生成的示例条目，请替换为真实数据。",
-      link: "detail:movie-550"
-    }
-  ];
-
-  return items;
+function abs(u, base) {
+  u = String(u || "").trim();
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.indexOf("//") === 0) return "https:" + u;
+  if (u.charAt(0) === "/") return BASE + u;
+  return (base || BASE + "/").replace(/[^/]*$/, "") + u;
 }
 
-/**
- * 详情页 — loadDetail 接收 link 字符串，返回富 VideoItem
- * 仅对 type: "url" 的条目生效；tmdb/douban/imdb 由 App 内置处理
- */
-async function loadDetail(link) {
-  const key = String(link).split(":")[1] || link;
+async function getHtml(url) {
+  // Widget.http.get 返回 {statusCode, data}；失败抛错由宿主展示
+  var r = await Widget.http.get(url, { headers: { Referer: BASE + "/" }, timeout: 15000 });
+  if (Number(r.statusCode || 200) >= 400) throw new Error("HTTP " + r.statusCode);
+  return r.data;
+}
 
-  // TODO: 根据 key 抓取详情，返回完整 VideoItem
-  if (!key) return null;
+/** 解析列表页为基础条目（先封面+标题，视频地址可后补） */
+function parseList(html) {
+  var $ = Widget.html.load(html), out = [], seen = {};
+  $("a[href]").each(function (_, el) {
+    var a = $(el), link = abs(a.attr("href"));
+    if (seen[link]) return;
+    var img = a.find("img").last();
+    var title = (a.attr("title") || img.attr("alt") || a.text() || "").replace(/\s+/g, " ").trim();
+    if (!title || !/\/detail\//.test(link)) return;
+    seen[link] = true;
+    out.push({ id: link, type: "url", title: title, link: link, posterPath: abs(img.attr("src")) });
+  });
+  return out;
+}
 
+/** 详情页解析：必须拿到视频地址；拿不到返回 null，列表会过滤掉 */
+function parseDetail(html, link) {
+  var $ = Widget.html.load(html), v = $("video").first();
+  var src = abs(v.attr("src") || v.find("source").first().attr("src"));
+  if (!/^https?:\/\//.test(src)) return null;
+  var poster = abs(v.attr("poster") || $('meta[property="og:image"]').attr("content"));
   return {
-    id: key,
-    type: "url",
-    title: "详情页示例",
-    mediaType: "movie",
-    link,
-    backdropPaths: ["https://example.com/still1.jpg"],
-    trailers: [{ coverUrl: "https://example.com/trailer.jpg", url: "https://example.com/trailer.mp4" }],
-    genreItems: [{ id: "drama", title: "剧情" }],
-    relatedItems: [],
-    videoUrl: "https://example.com/play.m3u8"
+    id: link, type: "url", title: ($("h1").first().text() || $("title").text()).trim(),
+    link: link, videoUrl: src, previewUrl: src,
+    posterPath: poster, backdropPath: poster, coverUrl: poster,
+    headers: { Referer: BASE + "/" }, customData: { loop: true }
   };
 }
 
-/**
- * 搜索 — 顶层 search 处理，非模块
- * params.keyword / params.page 由 App 内置注入
- */
-async function search(params) {
-  const keyword = params.keyword || "";
-  const page = params.page || 1;
+var cache = new Map();
 
-  // TODO: 实现搜索逻辑
-  return [];
+async function loadDetail(link) {
+  if (!/^https?:\/\//.test(link)) return null;
+  var hit = cache.get(link);
+  if (hit) return hit;
+  var d = parseDetail(await getHtml(link), link);
+  if (d) { cache.set(link, d); if (cache.size > 120) cache.delete(cache.keys().next().value); }
+  return d;
+}
+
+/**
+ * 列表入口。Topshelf/TV 用法：列表项必须同时带封面和视频地址，
+ * 因此这里对每条都调用 loadDetail，拿不到视频的直接过滤。
+ */
+async function getList(params) {
+  params = params || {};
+  var page = Number(params.pg || params.page || 1);
+  if (!Number.isInteger(page) || page < 1) throw new Error("页码必须是正整数");
+  var category = params.category || "hot";
+  var items = parseList(await getHtml(BASE + "/list?c=" + category + "&p=" + page));
+
+  var result = new Array(items.length), cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      var i = cursor++, it = items[i];
+      try { var d = await loadDetail(it.link); if (d) result[i] = Object.assign({}, it, d); }
+      catch (e) { console.warn("详情失败：" + it.link + " " + e.message); }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]); // 最多四并发
+  return result.filter(Boolean).slice(0, 30);
 }

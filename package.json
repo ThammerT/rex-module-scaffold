@@ -1,0 +1,1 @@
+{"name":"rex-module-scaffold","version":"0.2.0","private":true,"scripts":{"test":"node modules/yuanqi-wallpaper/test.cjs","test:yuanqi:live":"node modules/yuanqi-wallpaper/test.cjs --live"},"devDependencies":{"cheerio":"1.0.0"}}

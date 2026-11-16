@@ -1,62 +1,66 @@
-# create-rex-module
+# Rex 资源模块脚手架（rex-module-scaffold）
 
-Rex 资源类模块脚手架（Forward/Rex 播放器源模块）。与 `@rexnow/libs`（Widget 小组件工具链）不同，本脚手架专门面向 **播放器源模块**（`.js` 模块，可选 REXENC 加密）。
+面向 **Rex / Forward 播放器资源类模块** 的开发脚手架，覆盖：生成 → 抓取实现 → 本地回测 → 元数据校验 → 加密发布。
+
+> 与 `@rexnow/libs`（rex-widget-libs）的区别：那个是 **Widget 小组件** 工具链；本仓库是 **播放器资源模块**（`WidgetMetadata` + `getList`/`loadDetail` 宿主全局脚本），两者不共用核心代码，但 `rex-widget-libs` 里的 `env/*.ts` 类型定义可作为返回结构参考。
+
+## 目录结构
+
+```
+bin/create-rex-module.js     # 初始化入口（交互式向导 / 参数模式）
+templates/module/            # 资源模块代码模板（宿主全局脚本规范）
+tester/rex-runner.cjs        # 本地回测核心：按 WidgetMetadata 驱动，注入 Widget.http/Widget.html
+tester/mock-app.js           # CLI 入口
+validators/metadata.js       # 元数据校验
+encrypt/rexenc.js            # 在线加密尝试脚本
+modules/yuanqi-wallpaper/    # 真实可参考的成品模块（元气壁纸 v2.4.0）
+```
 
 ## 快速开始
 
 ```bash
-# 交互式创建
-node bin/create-rex-module.js --interactive
+git clone <本仓库地址>
+cd rex-module-scaffold
+npm install            # 只装测试用 cheerio
 
-# 非交互式创建
-node bin/create-rex-module.js \
-  --id forward.demo \
-  --title "示例资源" \
-  --output ./widgets/demo
+# 生成新模块（交互式）
+node bin/create-rex-module.js
+# 或参数模式
+node bin/create-rex-module.js --id forward.demo --title "示例" --author "吴主任" --output ./my-module
 ```
 
-生成的项目结构：
+## 模块规范（重要）
 
+资源模块是**宿主全局脚本**，不是 CommonJS：
+
+- 只能用宿主注入的全局对象：`Widget.http.get`、`Widget.html.load`（cheerio）、`console`；**不要**用 `require` / Node 的 `fetch`。
+- 顶层声明 `var WidgetMetadata = {...}`，`modules[].functionName` 指向列表函数（如 `getList`），`loadDetail(link)` 是详情函数。
+- 列表项 `type` 用 `"url"`，`id`/`link` 都是详情页完整地址。
+- 返回结构以 `rex-widget-libs/packages/libs/src/env/video.ts` 的 `VideoItem` 为准：封面看 `posterPath`/`coverUrl`/`backdropPath`，播放地址看 `videoUrl`/`previewUrl`。
+
+## 本地回测
+
+```bash
+# 普通回测：按元数据调用列表函数，校验 VideoItem 结构，并抽查 loadDetail
+node tester/mock-app.js modules/yuanqi-wallpaper/yuanqi-wallpaper.js '{"sortBy":"anime","pg":"1"}'
+
+# TV / Topshelf 专用回测：额外断言每条列表项【同时】带有效封面和有效视频地址
+node tester/mock-app.js modules/yuanqi-wallpaper/yuanqi-wallpaper.js '{"sortBy":"anime"}' --topshelf
+
+# 仅校验元数据
+node validators/metadata.js modules/yuanqi-wallpaper/yuanqi-wallpaper.js
 ```
-widgets/demo/
-├── forward-demo.js      # 模块源码（含 WidgetMetadata + 顶层 handler）
-├── package.json         # 项目配置（含 rex.moduleId / entry）
-├── build.js             # 构建脚本，输出到 dist/
-├── tester/
-│   └── mock-app.js      # 本地模拟 App 调用
-├── encrypt/
-│   └── rexenc.js        # REXENC 加密封装
-└── dist/                # 构建输出
+
+失败会以非零退出码结束，可直接接 CI。
+
+## TV / Topshelf 要求
+
+Topshelf 列表需要**每条都能直接预览播放**，所以列表函数里必须对每条调用 `loadDetail`，把 `videoUrl`/`previewUrl` 和封面一起放进列表项，拿不到视频的条目直接过滤。参考 `modules/yuanqi-wallpaper/yuanqi-wallpaper.js` 的实现，并用 `--topshelf` 模式验收。
+
+## 加密发布
+
+```bash
+node encrypt/rexenc.js <模块.js>
 ```
 
-## 流程
-
-1. **初始化** — `node bin/create-rex-module.js ...` 生成模板
-2. **填充逻辑** — 编辑 `forward-demo.js`，替换 TODO 处的数据源抓取
-3. **校验元数据** — `node validators/metadata.js forward-demo.js`
-4. **本地回测** — `node tester/mock-app.js forward-demo.js`
-5. **构建** — `node build.js` → `dist/forward-demo.js`
-6. **加密发布** — `node encrypt/rexenc.js dist/forward-demo.js` → `.enc` 文件
-
-## 模块规范要点
-
-- `WidgetMetadata` 必须包含 `id`（反向域名风格）、`title`、`version`、`author`、`modules` 数组、可选 `search`。
-- 每个模块条目需 `id`、`title`、`functionName`、`type`（stream/tv/live）。
-- `functionName` 对应模块内的异步函数，接收 `params`（含 `page`）。
-- `loadDetail(link)` 处理 `type: "url"` 条目的详情页；`tmdb/douban/imdb` 由 App 内置处理。
-- `search` 是顶层函数，非模块成员，接收 `keyword` / `page`。
-
-## 加密说明
-
-- 公开模块：可用 `rexnow.tv/encrypt` 在线加密，或通过官方渠道分发。
-- 私有模块：用 `rexnow.tv/encrypt` 自加密可能返回 `403 key-session 请求失败`，属正常。
-- 本脚手架的 `encrypt/rexenc.js` 会先尝试在线加密，失败则生成占位文件提示你走官方渠道。
-
-## 与 @rexnow/libs 的区别
-
-| | @rexnow/libs | create-rex-module |
-|---|---|---|
-| 对象 | Widget 小组件（面板/插件） | 播放器源模块（视频源） |
-| 核心 | WidgetAdaptor、Env Schema、Rslib 插件 | WidgetMetadata、loadList/loadDetail/search |
-| 输出 | 小组件包 | `.js` 模块 + 可选 `.enc` 加密件 |
-| 测试 | rstest | 本地 mock-app 回测 |
+官方分发的加密件可用 `rex-decrypt.pages.dev` 解出源码；`rexnow.tv/encrypt` 自加密私有模块可能返回 403，属官方限制。

@@ -55,17 +55,18 @@ function generateModule(outDir, values) {
     console.log(`   📄 生成：${dst}`);
   }
 
-  // 生成示例测试数据目录（供 mock-app 使用）
+  // 生成示例测试数据目录（供本地回测 fixtures 使用）
   const examplesDir = path.join(outDir, "examples");
   fs.mkdirSync(examplesDir, { recursive: true });
 
   console.log(`\n✅ 模块已生成到：${outDir}`);
   console.log(`\n📋 下一步：`);
   console.log(`   cd ${outDir}`);
-  console.log(`   # 1. 编辑 ${values.NAME}.js，把抓取逻辑填进 Demo / search / loadDetail / loadDanmu`);
-  console.log(`   # 2. 本地回测： node ../tester/mock-app.js ./${values.NAME}.js`);
-  console.log(`   # 3. 构建： node build.js`);
-  console.log(`   # 4. 加密发布： node ../encrypt/rexenc.js`);
+  console.log(`   # 1. 编辑 ${values.NAME}.js，把 parseList / parseDetail 的抓取逻辑填实`);
+  console.log(`   # 2. 本地回测： node ../../tester/mock-app.js ./${values.NAME}.js '{"pg":"1"}'`);
+  console.log(`   #    TV/Topshelf 专用： node ../../tester/mock-app.js ./${values.NAME}.js '{}' --topshelf`);
+  console.log(`   # 3. 元数据校验： node ../../validators/metadata.js ./${values.NAME}.js`);
+  console.log(`   # 4. 发布：直接把 ${values.NAME}.js 导入 Rex，或走 encrypt/rexenc.js 加密`);
 }
 
 /** 参数快速模式 */

@@ -1,0 +1,19 @@
+{
+  "name": "{{NAME}}",
+  "title": "{{TITLE}}",
+  "version": "{{VERSION}}",
+  "description": "Rex 资源模块：{{TITLE}}",
+  "author": "{{AUTHOR}}",
+  "license": "MIT",
+  "main": "{{NAME}}.js",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node tester/mock-app.js",
+    "encrypt": "node encrypt/rexenc.js"
+  },
+  "rex": {
+    "moduleId": "{{MODULE_ID}}",
+    "entry": "{{NAME}}.js",
+    "encrypt": true
+  }
+}
